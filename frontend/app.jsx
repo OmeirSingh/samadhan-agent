@@ -9,29 +9,46 @@ const SAMPLES = [
   "I applied for my income certificate 20 days ago at the revenue office but there is still no response.",
 ];
 
+/* ---- helpers ---- */
 function priBadge(p){ return <span className={"badge p-"+p}>{p}</span>; }
 function stBadge(s){ return <span className={"st st-"+s.replace(" ","")}>{s}</span>; }
+// Always render timestamps in India Standard Time regardless of the viewer's locale.
+function fmtIST(iso){
+  try {
+    return new Date(iso).toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", hour12: true,
+    }) + " IST";
+  } catch(e){ return iso; }
+}
+const govKey = () => localStorage.getItem("gov_key") || "";
+function govFetch(url, opts={}){
+  const headers = Object.assign({}, opts.headers, { "X-Official-Key": govKey() });
+  return fetch(url, Object.assign({}, opts, { headers }));
+}
 
 /* ---------------- Citizen: submit ---------------- */
-function SubmitForm({ onSubmitted }){
+function SubmitForm(){
   const [form, setForm] = useState({ citizen_name:"", citizen_contact:"", location:"", channel:"web", raw_text:"" });
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
   const upd = (k,v)=> setForm({ ...form, [k]:v });
 
   async function submit(e){
     e.preventDefault();
-    if(!form.raw_text.trim()) return;
+    setErr("");
+    if(!form.raw_text.trim()){ setErr("Please describe your grievance."); return; }
+    if(!form.location.trim()){ setErr("Location is required so we can route your case to the correct ward."); return; }
     setLoading(true); setResult(null);
     try {
       const r = await fetch(API+"/api/grievances", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify(form),
       });
-      const data = await r.json();
-      setResult(data);
-      onSubmitted && onSubmitted();
-    } catch(err){ alert("Error: "+err); }
+      if(!r.ok){ const d = await r.json().catch(()=>({})); throw new Error(d.detail?.[0]?.msg || d.detail || "Submission failed"); }
+      setResult(await r.json());
+    } catch(e){ setErr(String(e.message||e)); }
     setLoading(false);
   }
 
@@ -49,8 +66,10 @@ function SubmitForm({ onSubmitted }){
               <input value={form.citizen_contact} onChange={e=>upd("citizen_contact",e.target.value)} placeholder="Phone / email (optional)" /></div>
           </div>
           <div className="row">
-            <div><label>Location</label>
-              <input value={form.location} onChange={e=>upd("location",e.target.value)} placeholder="Area / ward / landmark" /></div>
+            <div><label>Location <span className="req">*</span></label>
+              <input value={form.location} onChange={e=>upd("location",e.target.value)}
+                className={!form.location.trim() && err ? "invalid" : ""}
+                placeholder="Area / ward / landmark (required)" /></div>
             <div><label>Channel</label>
               <select value={form.channel} onChange={e=>upd("channel",e.target.value)}>
                 <option value="web">Web form</option>
@@ -59,7 +78,7 @@ function SubmitForm({ onSubmitted }){
                 <option value="letter">Handwritten letter</option>
               </select></div>
           </div>
-          <label>Grievance details</label>
+          <label>Grievance details <span className="req">*</span></label>
           <textarea value={form.raw_text} onChange={e=>upd("raw_text",e.target.value)}
             placeholder="e.g. No water supply in our street for 4 days..." />
           <div className="chips">
@@ -68,6 +87,7 @@ function SubmitForm({ onSubmitted }){
               <span key={i} className="chip" onClick={()=>upd("raw_text",s)}>{s.slice(0,38)}…</span>
             ))}
           </div>
+          {err && <p className="form-err">{err}</p>}
           <button className="btn" disabled={loading}>{loading ? "Agent analysing…" : "Submit to Samadhan-Agent"}</button>
         </form>
       </div>
@@ -99,7 +119,8 @@ function SubmitForm({ onSubmitted }){
                 <b>📜 Policy basis (RAG-grounded)</b>{result.policy_basis}
               </div>
               <p className="muted-sm" style={{marginTop:12}}>
-                Track this case anytime with id <span className="track-id">{result.tracking_id}</span>.
+                Track this case anytime with id <span className="track-id">{result.tracking_id}</span> ·
+                filed {fmtIST(result.created_at)}.
               </p>
             </div>
           </div>
@@ -128,7 +149,7 @@ function Track(){
         <input value={tid} onChange={e=>setTid(e.target.value)} placeholder="SAM-2026-0001" style={{flex:1}} />
         <button className="btn" style={{marginTop:0, width:120}} onClick={look}>Track</button>
       </div>
-      {err && <p style={{color:"var(--crit)"}}>{err}</p>}
+      {err && <p className="form-err">{err}</p>}
       {res && (
         <div className="result">
           <div className="result-head">
@@ -139,7 +160,9 @@ function Track(){
               <dt>Status</dt><dd><b>{res.status}</b></dd>
               <dt>Department</dt><dd>{res.department}</dd>
               <dt>Summary</dt><dd>{res.summary}</dd>
-              <dt>Filed on</dt><dd>{new Date(res.created_at).toLocaleString()}</dd>
+              <dt>Location</dt><dd>{res.location || "—"}</dd>
+              <dt>Filed on</dt><dd>{fmtIST(res.created_at)}</dd>
+              <dt>Last update</dt><dd>{fmtIST(res.updated_at)}</dd>
             </dl>
           </div>
         </div>
@@ -148,10 +171,46 @@ function Track(){
   );
 }
 
-/* ---------------- Officials: dashboard ---------------- */
+/* ---------------- Government: login ---------------- */
+function GovLogin({ onAuth }){
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  async function login(e){
+    e.preventDefault();
+    setErr(""); setLoading(true);
+    try {
+      const r = await fetch(API+"/api/official/login", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ password: pw }),
+      });
+      if(!r.ok) throw new Error("Invalid government access code.");
+      const d = await r.json();
+      localStorage.setItem("gov_key", d.token);
+      onAuth();
+    } catch(e){ setErr(String(e.message||e)); }
+    setLoading(false);
+  }
+  return (
+    <div className="card card-pad" style={{maxWidth:420, margin:"40px auto"}}>
+      <div className="gov-lock">🔒</div>
+      <h2 className="section" style={{textAlign:"center"}}>Government Portal</h2>
+      <p className="sub" style={{textAlign:"center"}}>Restricted access for authorised officials only.</p>
+      <form onSubmit={login}>
+        <label>Access code</label>
+        <input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Enter government access code" autoFocus />
+        {err && <p className="form-err">{err}</p>}
+        <button className="btn" disabled={loading}>{loading ? "Verifying…" : "Sign in"}</button>
+      </form>
+      <p className="muted-sm" style={{textAlign:"center", marginTop:14}}>Citizens don’t need this — use the Citizen Portal to file or track a grievance.</p>
+    </div>
+  );
+}
+
+/* ---------------- Government: dashboard ---------------- */
 const STATUSES = ["Submitted","Routed","In Progress","Resolved","Rejected"];
 
-function Dashboard(){
+function Dashboard({ onLogout }){
   const [cases, setCases] = useState([]);
   const [stats, setStats] = useState(null);
   const [fDept, setFDept] = useState("");
@@ -162,16 +221,17 @@ function Dashboard(){
     const qs = new URLSearchParams();
     if(fDept) qs.set("department", fDept);
     if(fStatus) qs.set("status", fStatus);
-    const [c,s] = await Promise.all([
-      fetch(API+"/api/grievances?"+qs).then(r=>r.json()),
-      fetch(API+"/api/stats").then(r=>r.json()),
+    const [cr, sr] = await Promise.all([
+      govFetch(API+"/api/grievances?"+qs),
+      govFetch(API+"/api/stats"),
     ]);
-    setCases(c); setStats(s);
+    if(cr.status===401 || sr.status===401){ onLogout(); return; }
+    setCases(await cr.json()); setStats(await sr.json());
   }
   useEffect(()=>{ load(); }, [fDept, fStatus]);
 
   async function setStatus(id, status){
-    await fetch(API+"/api/grievances/"+id+"/status", {
+    await govFetch(API+"/api/grievances/"+id+"/status", {
       method:"PATCH", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ status }),
     });
@@ -184,6 +244,11 @@ function Dashboard(){
 
   return (
     <div>
+      <div className="gov-bar">
+        <span>🏛 <b>Government Portal</b> · Officials’ case management</span>
+        <span className="spacer"></span>
+        <button className="link-btn" onClick={onLogout}>Sign out</button>
+      </div>
       {stats && (
         <div className="stats">
           <div className="stat"><div className="n">{stats.total}</div><div className="l">Total cases</div></div>
@@ -204,14 +269,14 @@ function Dashboard(){
         <button className="btn btn-ghost" style={{marginTop:0,width:"auto",padding:"9px 16px"}} onClick={load}>Refresh</button>
       </div>
 
-      {cases.length===0 && <div className="empty">No cases yet. File one from the Citizen tab to populate the dashboard.</div>}
+      {cases.length===0 && <div className="empty">No cases yet. File one from the Citizen Portal to populate the dashboard.</div>}
       {cases.map(c=>(
         <div className="case" key={c.id}>
           <div className="case-top">
             <span className="track-id">{c.tracking_id}</span>
             {priBadge(c.priority)} {stBadge(c.status)}
             <span className="spacer"></span>
-            <span className="muted-sm">{new Date(c.created_at).toLocaleString()}</span>
+            <span className="muted-sm">{fmtIST(c.created_at)}</span>
           </div>
           <div className="case-sum">{c.summary}</div>
           <div className="case-meta">
@@ -235,17 +300,25 @@ function Dashboard(){
   );
 }
 
+function GovPortal(){
+  const [authed, setAuthed] = useState(!!govKey());
+  function logout(){ localStorage.removeItem("gov_key"); setAuthed(false); }
+  return authed
+    ? <Dashboard onLogout={logout} />
+    : <GovLogin onAuth={()=>setAuthed(true)} />;
+}
+
 /* ---------------- App shell ---------------- */
 function App(){
-  const [tab, setTab] = useState("submit");
+  const [portal, setPortal] = useState("citizen");   // citizen | gov
+  const [ctab, setCtab] = useState("submit");         // submit | track
   const [health, setHealth] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(()=>{ fetch(API+"/api/health").then(r=>r.json()).then(setHealth).catch(()=>{}); }, []);
 
   return (
     <div>
-      <div className="topbar">
+      <div className={"topbar "+(portal==="gov"?"gov":"")}>
         <div className="topbar-strip"></div>
         <div className="topbar-inner">
           <div className="logo">स</div>
@@ -254,22 +327,27 @@ function App(){
             <p>AI-first public grievance redressal · AI for Bharat</p>
           </div>
           <span className="spacer"></span>
+          <div className="portal-switch">
+            <button className={portal==="citizen"?"on":""} onClick={()=>setPortal("citizen")}>👥 Citizen Portal</button>
+            <button className={portal==="gov"?"on":""} onClick={()=>setPortal("gov")}>🏛 Government Portal</button>
+          </div>
           {health && (
             <span className={"mode-badge "+(health.ai_mode==="llm"?"mode-llm":"mode-rule")}>
-              AI: {health.ai_mode==="llm" ? "LLM ("+health.model+")" : "rule-based fallback"}
+              AI: {health.ai_mode==="llm" ? "LLM" : "rule-based"}
             </span>
           )}
         </div>
-        <div className="tabs">
-          <button className={"tab "+(tab==="submit"?"active":"")} onClick={()=>setTab("submit")}>📝 File Grievance</button>
-          <button className={"tab "+(tab==="track"?"active":"")} onClick={()=>setTab("track")}>🔍 Track</button>
-          <button className={"tab "+(tab==="dash"?"active":"")} onClick={()=>setTab("dash")}>🏛 Officials' Dashboard</button>
-        </div>
+        {portal==="citizen" && (
+          <div className="tabs">
+            <button className={"tab "+(ctab==="submit"?"active":"")} onClick={()=>setCtab("submit")}>📝 File Grievance</button>
+            <button className={"tab "+(ctab==="track"?"active":"")} onClick={()=>setCtab("track")}>🔍 Track</button>
+          </div>
+        )}
       </div>
       <div className="wrap">
-        {tab==="submit" && <SubmitForm onSubmitted={()=>setRefreshKey(k=>k+1)} />}
-        {tab==="track" && <Track />}
-        {tab==="dash" && <Dashboard key={refreshKey} />}
+        {portal==="citizen" && ctab==="submit" && <SubmitForm />}
+        {portal==="citizen" && ctab==="track" && <Track />}
+        {portal==="gov" && <GovPortal />}
       </div>
     </div>
   );

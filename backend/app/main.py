@@ -14,7 +14,7 @@ import datetime as dt
 import os
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,6 +22,16 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 load_dotenv()
+
+# Shared secret for the Government Portal. Override in production via env var.
+OFFICIAL_KEY = os.getenv("OFFICIAL_KEY", "samadhan-admin")
+
+
+def require_official(x_official_key: str = Header(default="")):
+    """Gate officials-only endpoints behind the shared government key."""
+    if x_official_key != OFFICIAL_KEY:
+        raise HTTPException(401, "Unauthorized — government login required")
+    return True
 
 from . import agent, models, schemas          # noqa: E402
 from .database import Base, engine, get_db     # noqa: E402
@@ -51,6 +61,14 @@ def health():
     return {"status": "ok", "ai_mode": mode, "model": os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001")}
 
 
+@app.post("/api/official/login")
+def official_login(payload: schemas.OfficialLogin):
+    """Government Portal login. Returns the access key on success."""
+    if payload.password != OFFICIAL_KEY:
+        raise HTTPException(401, "Invalid government access code")
+    return {"ok": True, "token": OFFICIAL_KEY}
+
+
 @app.post("/api/grievances", response_model=schemas.GrievanceOut)
 def create_grievance(payload: schemas.GrievanceCreate, db: Session = Depends(get_db)):
     result = agent.analyze(payload.raw_text, payload.location or "")
@@ -76,6 +94,7 @@ def list_grievances(
     status: str | None = None,
     department: str | None = None,
     db: Session = Depends(get_db),
+    _: bool = Depends(require_official),
 ):
     q = db.query(models.Grievance)
     if status:
@@ -90,7 +109,7 @@ def list_grievances(
 
 
 @app.get("/api/grievances/{gid}", response_model=schemas.GrievanceOut)
-def get_grievance(gid: int, db: Session = Depends(get_db)):
+def get_grievance(gid: int, db: Session = Depends(get_db), _: bool = Depends(require_official)):
     g = db.query(models.Grievance).get(gid)
     if not g:
         raise HTTPException(404, "Grievance not found")
@@ -106,7 +125,12 @@ def track(tracking_id: str, db: Session = Depends(get_db)):
 
 
 @app.patch("/api/grievances/{gid}/status", response_model=schemas.GrievanceOut)
-def update_status(gid: int, payload: schemas.StatusUpdate, db: Session = Depends(get_db)):
+def update_status(
+    gid: int,
+    payload: schemas.StatusUpdate,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_official),
+):
     g = db.query(models.Grievance).get(gid)
     if not g:
         raise HTTPException(404, "Grievance not found")
@@ -120,7 +144,7 @@ def update_status(gid: int, payload: schemas.StatusUpdate, db: Session = Depends
 
 
 @app.get("/api/stats")
-def stats(db: Session = Depends(get_db)):
+def stats(db: Session = Depends(get_db), _: bool = Depends(require_official)):
     total = db.query(models.Grievance).count()
     by_status = dict(
         db.query(models.Grievance.status, func.count()).group_by(models.Grievance.status).all()

@@ -115,3 +115,21 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--s
   background: var(--navy); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; box-shadow: var(--shadow); }
 .muted-sm { font-size: 12px; color: var(--muted); }
 .raw { background: #f9fafb; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #475467; margin-top: 6px; }
+
+/* Portal switch */
+.portal-switch { display: flex; gap: 4px; background: #ffffff18; border: 1px solid #ffffff2a; border-radius: 10px; padding: 3px; margin-right: 14px; }
+.portal-switch button { border: none; background: none; color: #c7d2e6; font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+.portal-switch button.on { background: #fff; color: var(--navy); }
+.topbar.gov { background: #0a2e14; }
+.topbar.gov .topbar-strip { background: linear-gradient(90deg, var(--green), #0a2e14); }
+
+/* Required-field + errors */
+.req { color: var(--crit); }
+input.invalid { border-color: var(--crit); box-shadow: 0 0 0 3px #d92d2022; }
+.form-err { color: var(--crit); font-size: 13px; margin: 12px 0 0; background: #fee4e2; border: 1px solid #fda29b; padding: 9px 12px; border-radius: 8px; }
+
+/* Government portal */
+.gov-lock { text-align: center; font-size: 34px; margin-bottom: 6px; }
+.gov-bar { display: flex; align-items: center; gap: 8px; background: #ecfdf3; border: 1px solid #abefc6; color: #067647;
+  padding: 10px 16px; border-radius: 10px; font-size: 13.5px; margin-bottom: 18px; }
+.link-btn { background: none; border: none; color: #067647; font-weight: 700; cursor: pointer; font-size: 13px; text-decoration: underline; }

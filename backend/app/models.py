@@ -4,6 +4,11 @@ from sqlalchemy import Column, Integer, String, Text, DateTime
 from .database import Base
 
 
+def _now_utc() -> dt.datetime:
+    """Timezone-aware UTC timestamp so clients can convert to IST correctly."""
+    return dt.datetime.now(dt.timezone.utc)
+
+
 class Grievance(Base):
     __tablename__ = "grievances"
 
@@ -31,5 +36,5 @@ class Grievance(Base):
 
     # Workflow
     status = Column(String, default="Submitted")     # Submitted | Routed | In Progress | Resolved | Rejected
-    created_at = Column(DateTime, default=dt.datetime.utcnow)
-    updated_at = Column(DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_now_utc)
+    updated_at = Column(DateTime(timezone=True), default=_now_utc, onupdate=_now_utc)
