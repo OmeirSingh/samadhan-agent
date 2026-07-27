@@ -18,7 +18,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
-        value: "gemini-2.0-flash"
+        value: "gemini-2.5-flash"
       # Optional paid alternative; used only if GEMINI_API_KEY is unset.
       - key: ANTHROPIC_API_KEY
         sync: false
