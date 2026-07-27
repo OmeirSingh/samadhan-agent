@@ -157,16 +157,42 @@ def _anthropic(raw_text: str, location: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Channel-based escalation
+# ---------------------------------------------------------------------------
+PRIORITY_ORDER = ["Low", "Medium", "High", "Critical"]
+
+
+def _apply_channel_priority(result: dict, channel: str) -> dict:
+    """Signed official correspondence outranks anonymous submissions.
+
+    A handwritten letter is treated as signed/official correspondence (an
+    escalation from an authority), so its priority is floored at High — it is
+    never buried below routine web submissions. Genuine Critical cases stay
+    Critical.
+    """
+    if channel == "letter":
+        current = result.get("priority", "Medium")
+        if PRIORITY_ORDER.index(current) < PRIORITY_ORDER.index("High"):
+            result["priority"] = "High"
+            result["suggested_action"] = (
+                "[Priority escalated — signed official correspondence] "
+                + result.get("suggested_action", "")
+            )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
-def analyze(raw_text: str, location: str = "") -> dict:
+def analyze(raw_text: str, location: str = "", channel: str = "web") -> dict:
     """Run the agent, preferring an LLM and falling back gracefully."""
     provider = providers.active_provider()
     if provider == "rule-based":
-        return _rule_based(raw_text, location)
-    try:
-        return _gemini(raw_text, location) if provider == "gemini" else _anthropic(raw_text, location)
-    except Exception as e:  # noqa: BLE001 — demo must never crash
         result = _rule_based(raw_text, location)
-        result["suggested_action"] += f"  [LLM unavailable, used rule-based fallback: {e}]"
-        return result
+    else:
+        try:
+            result = _gemini(raw_text, location) if provider == "gemini" else _anthropic(raw_text, location)
+        except Exception as e:  # noqa: BLE001 — demo must never crash
+            result = _rule_based(raw_text, location)
+            result["suggested_action"] += f"  [LLM unavailable, used rule-based fallback: {e}]"
+    return _apply_channel_priority(result, channel)

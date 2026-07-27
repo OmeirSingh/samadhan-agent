@@ -37,6 +37,11 @@ File a grievance through the channel that suits you, and track it by ID:
 | **Image / scanned PDF** | Upload — AI vision OCR extracts the text |
 | **Handwritten letter** | Upload a photo — AI vision reads the handwriting |
 
+> **Channel-weighted priority:** a handwritten letter is treated as *signed official
+> correspondence* (an escalation from an authority), so its priority is floored at
+> **High** — it is never buried below routine web submissions. Genuine Critical cases
+> stay Critical. This is why "Image" and "Handwritten letter" are separate channels.
+
 The **agentic pipeline** then, in one step:
 1. **Extracts** a clean summary and the location,
 2. **Classifies** the issue and **routes** it to the correct department,

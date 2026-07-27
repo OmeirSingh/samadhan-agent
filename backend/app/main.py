@@ -88,7 +88,7 @@ async def extract_file(file: UploadFile = File(...)):
 
 @app.post("/api/grievances", response_model=schemas.GrievanceOut)
 def create_grievance(payload: schemas.GrievanceCreate, db: Session = Depends(get_db)):
-    result = agent.analyze(payload.raw_text, payload.location or "")
+    result = agent.analyze(payload.raw_text, payload.location or "", payload.channel or "web")
 
     g = models.Grievance(
         tracking_id=_make_tracking_id(db),
