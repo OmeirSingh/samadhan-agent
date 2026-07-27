@@ -64,28 +64,6 @@ def health():
     }
 
 
-@app.get("/api/_diag")
-def diag():
-    """TEMP diagnostic: probe candidate Gemini models with the live key to find
-    one that actually works on this account/plan. Remove after configuring."""
-    if providers.active_provider() != "gemini":
-        return {"provider": providers.active_provider(), "note": "Gemini key not set."}
-    from google import genai
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-    candidates = [
-        "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash-001",
-        "gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-flash-latest",
-    ]
-    out = {}
-    for m in candidates:
-        try:
-            r = client.models.generate_content(model=m, contents=["ping"])
-            out[m] = "OK: " + (r.text or "")[:20]
-        except Exception as e:  # noqa: BLE001
-            out[m] = str(e)[:140]
-    return out
-
-
 @app.post("/api/official/login")
 def official_login(payload: schemas.OfficialLogin):
     """Government Portal login. Returns the access key on success."""
