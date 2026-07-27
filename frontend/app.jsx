@@ -19,6 +19,9 @@ const SAMPLES = [
 /* ---- helpers ---- */
 function priBadge(p){ return <span className={"badge p-"+p}>{p}</span>; }
 function stBadge(s){ return <span className={"st st-"+s.replace(" ","")}>{s}</span>; }
+const AI_LABELS = { gemini: "Gemini", llm: "Claude", "rule-based": "rule-based" };
+const isAI = (m) => m && m !== "rule-based";
+const aiLabel = (m) => AI_LABELS[m] || m || "rule-based";
 // Always render timestamps in India Standard Time regardless of the viewer's locale.
 function fmtIST(iso){
   try {
@@ -239,8 +242,8 @@ function SubmitForm(){
               <span className="track-id">{result.tracking_id}</span>
               {priBadge(result.priority)} {stBadge(result.status)}
               <span className="spacer"></span>
-              <span className={"mode-badge "+(result.ai_mode==="llm"?"mode-llm":"mode-rule")}>
-                {result.ai_mode==="llm" ? "LLM" : "rule-based"}
+              <span className={"mode-badge "+(isAI(result.ai_mode)?"mode-llm":"mode-rule")}>
+                {aiLabel(result.ai_mode)}
               </span>
             </div>
             <div className="result-body">
@@ -469,8 +472,8 @@ function App(){
             <button className={portal==="gov"?"on":""} onClick={()=>setPortal("gov")}>🏛 Government Portal</button>
           </div>
           {health && (
-            <span className={"mode-badge "+(health.ai_mode==="llm"?"mode-llm":"mode-rule")}>
-              AI: {health.ai_mode==="llm" ? "LLM" : "rule-based"}
+            <span className={"mode-badge "+(isAI(health.provider)?"mode-llm":"mode-rule")}>
+              AI: {aiLabel(health.provider)}
             </span>
           )}
         </div>

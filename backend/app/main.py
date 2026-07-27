@@ -33,8 +33,8 @@ def require_official(x_official_key: str = Header(default="")):
         raise HTTPException(401, "Unauthorized — government login required")
     return True
 
-from . import agent, extract, models, schemas  # noqa: E402
-from .database import Base, engine, get_db      # noqa: E402
+from . import agent, extract, models, providers, schemas  # noqa: E402
+from .database import Base, engine, get_db                 # noqa: E402
 
 Base.metadata.create_all(bind=engine)
 
@@ -57,8 +57,11 @@ def _make_tracking_id(db: Session) -> str:
 
 @app.get("/api/health")
 def health():
-    mode = "llm" if os.getenv("ANTHROPIC_API_KEY") else "rule-based"
-    return {"status": "ok", "ai_mode": mode, "model": os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001")}
+    return {
+        "status": "ok",
+        "provider": providers.active_provider(),
+        "model": providers.active_model(),
+    }
 
 
 @app.post("/api/official/login")

@@ -7,14 +7,16 @@ Given raw citizen input, the agent:
   4. Reads sentiment
   5. Drafts a suggested action citing official policy
 
-Two execution modes, chosen automatically:
-  - "llm":        uses Claude (or any configured provider) when a key is set
+Execution modes, chosen automatically by which key is set:
+  - "gemini":     Google Gemini (free tier) — preferred
+  - "llm":        Anthropic Claude
   - "rule-based": deterministic keyword engine, so the demo runs offline
 The rule-based path guarantees the pipeline never breaks live.
 """
 import json
 import os
 
+from . import providers
 from .policies import POLICY_CORPUS, retrieve_policy
 
 DEPARTMENTS = [d["department"] for d in POLICY_CORPUS]
@@ -82,14 +84,9 @@ def _rule_based(raw_text: str, location: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# LLM engine (used when ANTHROPIC_API_KEY is present)
+# LLM engine — Gemini (free tier) preferred, then Claude. Both grounded in RAG.
 # ---------------------------------------------------------------------------
-def _llm(raw_text: str, location: str) -> dict:
-    import anthropic
-
-    model = os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001")
-    client = anthropic.Anthropic()
-
+def _prompts(raw_text: str, location: str) -> tuple[str, str]:
     dept_list = "\n".join(f"- {d}" for d in DEPARTMENTS)
     # Give the model the full policy corpus as retrieval context (RAG).
     policy_context = "\n\n".join(f"[{d['title']}] ({d['department']})\n{d['text']}" for d in POLICY_CORPUS)
@@ -111,9 +108,43 @@ def _llm(raw_text: str, location: str) -> dict:
         "(quote the specific policy title + rule you relied on), suggested_action "
         "(one concrete next step for the assigned official)."
     )
+    return system, user
 
+
+def _finalize(data: dict, raw_text: str, location: str, mode: str) -> dict:
+    if data.get("department") not in DEPARTMENTS:
+        # Reconcile a hallucinated department with the closest known policy
+        data["department"] = retrieve_policy(raw_text)["department"]
+    data["ai_mode"] = mode
+    data.setdefault("location", location or "")
+    return data
+
+
+def _gemini(raw_text: str, location: str) -> dict:
+    from google import genai
+    from google.genai import types
+
+    system, user = _prompts(raw_text, location)
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    resp = client.models.generate_content(
+        model=providers.gemini_model(),
+        contents=[user],
+        config=types.GenerateContentConfig(
+            system_instruction=system,
+            response_mime_type="application/json",
+            max_output_tokens=800,
+        ),
+    )
+    return _finalize(json.loads(resp.text), raw_text, location, "gemini")
+
+
+def _anthropic(raw_text: str, location: str) -> dict:
+    import anthropic
+
+    system, user = _prompts(raw_text, location)
+    client = anthropic.Anthropic()
     resp = client.messages.create(
-        model=model,
+        model=providers.anthropic_model(),
         max_tokens=700,
         system=system,
         messages=[{"role": "user", "content": user}],
@@ -122,26 +153,20 @@ def _llm(raw_text: str, location: str) -> dict:
     if text.startswith("```"):
         text = text.strip("`")
         text = text[text.find("{"):text.rfind("}") + 1]
-
-    data = json.loads(text)
-    if data.get("department") not in DEPARTMENTS:
-        # Reconcile a hallucinated department with the closest known policy
-        data["department"] = retrieve_policy(raw_text)["department"]
-    data["ai_mode"] = "llm"
-    data.setdefault("location", location or "")
-    return data
+    return _finalize(json.loads(text), raw_text, location, "llm")
 
 
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 def analyze(raw_text: str, location: str = "") -> dict:
-    """Run the agent, preferring the LLM and falling back gracefully."""
-    if os.getenv("ANTHROPIC_API_KEY"):
-        try:
-            return _llm(raw_text, location)
-        except Exception as e:  # noqa: BLE001 — demo must never crash
-            result = _rule_based(raw_text, location)
-            result["suggested_action"] += f"  [LLM unavailable, used rule-based fallback: {e}]"
-            return result
-    return _rule_based(raw_text, location)
+    """Run the agent, preferring an LLM and falling back gracefully."""
+    provider = providers.active_provider()
+    if provider == "rule-based":
+        return _rule_based(raw_text, location)
+    try:
+        return _gemini(raw_text, location) if provider == "gemini" else _anthropic(raw_text, location)
+    except Exception as e:  # noqa: BLE001 — demo must never crash
+        result = _rule_based(raw_text, location)
+        result["suggested_action"] += f"  [LLM unavailable, used rule-based fallback: {e}]"
+        return result
