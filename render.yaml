@@ -17,3 +17,10 @@ services:
         sync: false
       - key: LLM_MODEL
         value: "claude-haiku-4-5-20251001"
+      # Government Portal login code — set your own value in the dashboard.
+      - key: OFFICIAL_KEY
+        sync: false
+      # Persistent Postgres. Paste your database's Internal URL in the dashboard
+      # so grievances survive redeploys. Without it the app uses ephemeral SQLite.
+      - key: DATABASE_URL
+        sync: false

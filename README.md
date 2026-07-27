@@ -13,6 +13,12 @@ correct department, assigns **priority** based on official SLA policy, and draft
 **policy-grounded next action**. Officials get a live **dashboard** to triage, track,
 and resolve.
 
+### Two portals
+- **👥 Citizen Portal** (public) — file a grievance (location required) and track it by id. No login.
+- **🏛 Government Portal** (restricted) — officials sign in with an access code to reach the
+  case-management dashboard: stats, filters, and status updates. The officials-only API
+  endpoints are gated server-side via the `OFFICIAL_KEY`.
+
 ---
 
 ## Why this MVP maps to the evaluation criteria
@@ -80,6 +86,24 @@ cp backend/.env.example backend/.env
 ```
 
 The header badge shows which mode is active (`LLM` vs `rule-based fallback`).
+
+### Government Portal login
+Default access code is `samadhan-admin` (set `OFFICIAL_KEY` to change it). Open the
+**Government Portal** tab → enter the code → dashboard.
+
+### Persistent database (production)
+Local dev uses SQLite. On a host with an ephemeral disk (e.g. Render free tier),
+set `DATABASE_URL` to a hosted Postgres connection string so grievances and their
+status survive restarts and redeploys. `postgres://` / `postgresql://` URLs are
+auto-normalised to the psycopg 3 driver.
+
+### Environment variables
+| Var | Purpose | Default |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Enables the live LLM agent | _(unset → rule-based)_ |
+| `LLM_MODEL` | Reasoning model | `claude-haiku-4-5-20251001` |
+| `OFFICIAL_KEY` | Government Portal access code | `samadhan-admin` |
+| `DATABASE_URL` | Persistent Postgres URL | _(unset → SQLite)_ |
 
 ---
 
