@@ -33,8 +33,9 @@ body { margin: 0; background: var(--bg); color: var(--ink);
 /* Tabs */
 .tabs { max-width: 1120px; margin: 0 auto; padding: 0 24px; display: flex; gap: 4px; }
 .tab { padding: 13px 18px; border: none; background: none; font-size: 14px; font-weight: 600;
-  color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; }
-.tab.active { color: var(--navy); border-bottom-color: var(--saffron); }
+  color: #a9b6cc; cursor: pointer; border-bottom: 3px solid transparent; }
+.tab:hover { color: #e6ecf5; }
+.tab.active { color: #ffffff; border-bottom-color: var(--saffron); }
 
 /* Layout */
 .wrap { max-width: 1120px; margin: 0 auto; padding: 26px 24px 60px; }
