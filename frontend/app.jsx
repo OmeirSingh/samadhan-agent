@@ -1,5 +1,12 @@
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 const API = ""; // same origin
+
+const CHANNELS = [
+  { id: "web",    label: "Web form",                    icon: "📝" },
+  { id: "voice",  label: "Voice note (speak)",          icon: "🎤" },
+  { id: "image",  label: "Image / scanned PDF (OCR)",   icon: "🖼️" },
+  { id: "letter", label: "Handwritten letter (OCR)",    icon: "✍️" },
+];
 
 const SAMPLES = [
   "There has been no water supply in our entire street in Gandhi Nagar for the last 4 days. Elderly residents are struggling.",
@@ -27,24 +34,126 @@ function govFetch(url, opts={}){
   return fetch(url, Object.assign({}, opts, { headers }));
 }
 
+/* ---------------- Channel-specific intake widgets ---------------- */
+function VoiceInput({ text, setText, recording, setRecording }){
+  const recRef = useRef(null);
+  const [interim, setInterim] = useState("");
+  const supported = typeof window !== "undefined" &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  function toggle(){
+    if(recording){ recRef.current && recRef.current.stop(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SR();
+    rec.lang = "en-IN"; rec.continuous = true; rec.interimResults = true;
+    rec.onresult = (e)=>{
+      let itm = "", fin = "";
+      for(let i=e.resultIndex; i<e.results.length; i++){
+        const chunk = e.results[i][0].transcript;
+        if(e.results[i].isFinal) fin += chunk + " "; else itm += chunk;
+      }
+      if(fin) setText(prev => (prev + " " + fin).replace(/\s+/g," ").trim());
+      setInterim(itm);
+    };
+    rec.onend = ()=>{ setRecording(false); setInterim(""); };
+    rec.onerror = ()=>{ setRecording(false); setInterim(""); };
+    recRef.current = rec; rec.start(); setRecording(true);
+  }
+
+  if(!supported){
+    return (
+      <div className="channel-box">
+        <p className="muted-sm">🎤 Live voice capture needs Chrome/Edge. Please type your spoken grievance below.</p>
+        <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Type what you would say…" />
+      </div>
+    );
+  }
+  return (
+    <div className="channel-box">
+      <button type="button" className={"rec-btn "+(recording?"on":"")} onClick={toggle}>
+        {recording ? "⏹ Stop recording" : "🎤 Speak your grievance"}
+      </button>
+      {recording && <span className="rec-live">● listening…</span>}
+      <textarea value={text + (interim ? " "+interim : "")}
+        onChange={e=>{ setText(e.target.value); }}
+        placeholder="Your spoken words appear here (you can edit them)…" />
+    </div>
+  );
+}
+
+function FileInput({ channel, text, setText, onMeta }){
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [fname, setFname] = useState("");
+  const accept = channel === "image" ? "image/*,application/pdf" : "image/*";
+
+  async function onPick(e){
+    const f = e.target.files[0];
+    if(!f) return;
+    setBusy(true); setNote(""); setFname(f.name); onMeta && onMeta(f.name);
+    try {
+      const fd = new FormData(); fd.append("file", f);
+      const r = await fetch(API+"/api/extract", { method:"POST", body: fd });
+      const d = await r.json();
+      if(d.text) setText(d.text);
+      if(d.note) setNote(d.note);
+    } catch(err){ setNote("Could not process file: "+err); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="channel-box">
+      <label className="file-drop">
+        <input type="file" accept={accept} onChange={onPick} hidden />
+        <span>{channel === "image" ? "🖼️ Upload image or PDF" : "✍️ Upload photo of the letter"}</span>
+        <span className="muted-sm">{fname || "Click to choose a file (max 10 MB)"}</span>
+      </label>
+      {busy && <p className="muted-sm">⏳ Extracting text from the document…</p>}
+      {note && <p className="channel-note">{note}</p>}
+      <label>Extracted text {text ? "" : "(will appear here)"}</label>
+      <textarea value={text} onChange={e=>setText(e.target.value)}
+        placeholder="Extracted text appears here — edit if needed." />
+    </div>
+  );
+}
+
 /* ---------------- Citizen: submit ---------------- */
 function SubmitForm(){
-  const [form, setForm] = useState({ citizen_name:"", citizen_contact:"", location:"", channel:"web", raw_text:"" });
+  const [form, setForm] = useState({ citizen_name:"", citizen_contact:"", location:"", channel:"web" });
+  const [primary, setPrimary] = useState("");   // typed / transcribed / OCR'd text
+  const [extra, setExtra] = useState("");       // additional written details
+  const [attachment, setAttachment] = useState("");
+  const [recording, setRecording] = useState(false);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const upd = (k,v)=> setForm({ ...form, [k]:v });
 
+  function switchChannel(ch){
+    setForm({ ...form, channel: ch });
+    setPrimary(""); setExtra(""); setAttachment(""); setResult(null); setErr("");
+  }
+
+  const combinedText = form.channel === "web"
+    ? primary
+    : [primary, extra].map(s=>s.trim()).filter(Boolean).join("\n\n");
+
   async function submit(e){
     e.preventDefault();
     setErr("");
-    if(!form.raw_text.trim()){ setErr("Please describe your grievance."); return; }
+    if(recording){ setErr("Please stop the recording before submitting."); return; }
+    if(!combinedText.trim()){ setErr("Please provide your grievance details."); return; }
     if(!form.location.trim()){ setErr("Location is required so we can route your case to the correct ward."); return; }
     setLoading(true); setResult(null);
     try {
+      const payload = {
+        citizen_name: form.citizen_name, citizen_contact: form.citizen_contact,
+        location: form.location, channel: form.channel,
+        raw_text: combinedText, attachment_note: attachment,
+      };
       const r = await fetch(API+"/api/grievances", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       if(!r.ok){ const d = await r.json().catch(()=>({})); throw new Error(d.detail?.[0]?.msg || d.detail || "Submission failed"); }
       setResult(await r.json());
@@ -56,8 +165,8 @@ function SubmitForm(){
     <div className="grid2">
       <div className="card card-pad">
         <h2 className="section">File a Grievance</h2>
-        <p className="sub">Describe your civic issue in your own words. The AI agent extracts the details,
-          routes it to the right department, and grounds the action in official policy.</p>
+        <p className="sub">Report a civic issue by text, voice, photo, or scanned letter. The AI agent
+          extracts the details, routes it to the right department, and grounds the action in official policy.</p>
         <form onSubmit={submit}>
           <div className="row">
             <div><label>Your name</label>
@@ -65,28 +174,56 @@ function SubmitForm(){
             <div><label>Contact</label>
               <input value={form.citizen_contact} onChange={e=>upd("citizen_contact",e.target.value)} placeholder="Phone / email (optional)" /></div>
           </div>
-          <div className="row">
-            <div><label>Location <span className="req">*</span></label>
-              <input value={form.location} onChange={e=>upd("location",e.target.value)}
-                className={!form.location.trim() && err ? "invalid" : ""}
-                placeholder="Area / ward / landmark (required)" /></div>
-            <div><label>Channel</label>
-              <select value={form.channel} onChange={e=>upd("channel",e.target.value)}>
-                <option value="web">Web form</option>
-                <option value="voice">Voice note (transcribed)</option>
-                <option value="image">Image / scanned letter (OCR)</option>
-                <option value="letter">Handwritten letter</option>
-              </select></div>
-          </div>
-          <label>Grievance details <span className="req">*</span></label>
-          <textarea value={form.raw_text} onChange={e=>upd("raw_text",e.target.value)}
-            placeholder="e.g. No water supply in our street for 4 days..." />
-          <div className="chips">
-            <span className="muted-sm" style={{width:"100%"}}>Try a sample:</span>
-            {SAMPLES.map((s,i)=>(
-              <span key={i} className="chip" onClick={()=>upd("raw_text",s)}>{s.slice(0,38)}…</span>
+          <label>Location <span className="req">*</span></label>
+          <input value={form.location} onChange={e=>upd("location",e.target.value)}
+            className={!form.location.trim() && err ? "invalid" : ""}
+            placeholder="Area / ward / landmark (required)" />
+
+          <label>How would you like to submit?</label>
+          <div className="ch-tabs">
+            {CHANNELS.map(c=>(
+              <button type="button" key={c.id}
+                className={"ch-tab "+(form.channel===c.id?"on":"")}
+                onClick={()=>switchChannel(c.id)}>
+                <span className="ch-ico">{c.icon}</span>{c.label}
+              </button>
             ))}
           </div>
+
+          {form.channel === "web" && (
+            <div>
+              <label>Grievance details <span className="req">*</span></label>
+              <textarea value={primary} onChange={e=>setPrimary(e.target.value)}
+                placeholder="e.g. No water supply in our street for 4 days..." />
+              <div className="chips">
+                <span className="muted-sm" style={{width:"100%"}}>Try a sample:</span>
+                {SAMPLES.map((s,i)=>(
+                  <span key={i} className="chip" onClick={()=>setPrimary(s)}>{s.slice(0,38)}…</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {form.channel === "voice" && (
+            <div>
+              <label>Voice grievance <span className="req">*</span></label>
+              <VoiceInput text={primary} setText={setPrimary} recording={recording} setRecording={setRecording} />
+              <label>Additional written details (optional)</label>
+              <textarea value={extra} onChange={e=>setExtra(e.target.value)}
+                placeholder="Add anything you couldn't say in the recording…" style={{minHeight:70}} />
+            </div>
+          )}
+
+          {(form.channel === "image" || form.channel === "letter") && (
+            <div>
+              <label>{form.channel==="image" ? "Image / scanned PDF" : "Handwritten letter"} <span className="req">*</span></label>
+              <FileInput channel={form.channel} text={primary} setText={setPrimary} onMeta={setAttachment} />
+              <label>Additional written details (optional)</label>
+              <textarea value={extra} onChange={e=>setExtra(e.target.value)}
+                placeholder="Add any extra context in writing…" style={{minHeight:70}} />
+            </div>
+          )}
+
           {err && <p className="form-err">{err}</p>}
           <button className="btn" disabled={loading}>{loading ? "Agent analysing…" : "Submit to Samadhan-Agent"}</button>
         </form>

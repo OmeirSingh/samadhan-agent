@@ -14,7 +14,7 @@ import datetime as dt
 import os
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,8 +33,8 @@ def require_official(x_official_key: str = Header(default="")):
         raise HTTPException(401, "Unauthorized — government login required")
     return True
 
-from . import agent, models, schemas          # noqa: E402
-from .database import Base, engine, get_db     # noqa: E402
+from . import agent, extract, models, schemas  # noqa: E402
+from .database import Base, engine, get_db      # noqa: E402
 
 Base.metadata.create_all(bind=engine)
 
@@ -67,6 +67,20 @@ def official_login(payload: schemas.OfficialLogin):
     if payload.password != OFFICIAL_KEY:
         raise HTTPException(401, "Invalid government access code")
     return {"ok": True, "token": OFFICIAL_KEY}
+
+
+@app.post("/api/extract")
+async def extract_file(file: UploadFile = File(...)):
+    """OCR an uploaded image / scanned PDF / handwritten letter into text.
+
+    Public endpoint used by the citizen intake form for non-web channels.
+    """
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(413, "File too large (max 10 MB).")
+    result = extract.extract_text(data, file.content_type or "", file.filename or "")
+    result["filename"] = file.filename
+    return result
 
 
 @app.post("/api/grievances", response_model=schemas.GrievanceOut)
