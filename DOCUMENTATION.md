@@ -166,18 +166,7 @@ Access code defaults to `samadhan-admin` (override with `OFFICIAL_KEY`).
 
 ---
 
-## 9. Demo Script
-
-1. **Citizen Portal → File Grievance.** Choose **Voice note**, click *Speak your grievance*, and say: *"A live electric wire has fallen near the school in Sector 7, it's dangerous for children."* Add a location. Submit.
-   → Agent returns **Electricity Board · Critical**, citing the electrocution-hazard SLA.
-2. File a second one via **Web form** (*income certificate delayed 20 days*) → routes to **Revenue & Land Records**, routine priority.
-3. (If a key is set) **Image / scanned PDF** → upload a complaint letter → watch the text get OCR-extracted, then routed.
-4. **Government Portal** → sign in → cases sorted **critical-first** with live KPIs. Move the wire case to **In Progress** → stats update.
-5. **Track** → paste `SAM-2026-0001` → citizen sees live status, all timestamps in **IST**.
-
----
-
-## 10. Feasibility & Scalability
+## 9. Feasibility & Scalability
 
 - **Technical viability:** industry-standard stack (FastAPI, SQLAlchemy, Postgres) that handles high-volume public-service data; the agent is stateless and horizontally scalable.
 - **Operational integration:** an "AI-first overlay" — deployable alongside existing administrative workflows without an infrastructure overhaul.
@@ -187,7 +176,7 @@ Access code defaults to `samadhan-admin` (override with `OFFICIAL_KEY`).
 
 ---
 
-## 11. Current Scope vs. Roadmap
+## 10. Current Scope vs. Roadmap
 
 **Working today:** two-portal app; multi-modal intake (voice live, image/PDF/handwriting OCR with a key); agentic routing + prioritisation; RAG policy grounding; officials' auth + dashboard; tracking; IST timestamps; Gemini/Claude/rule-based providers; live cloud deployment.
 
