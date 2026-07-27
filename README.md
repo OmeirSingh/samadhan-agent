@@ -98,12 +98,20 @@ status survive restarts and redeploys. `postgres://` / `postgresql://` URLs are
 auto-normalised to the psycopg 3 driver.
 
 ### Environment variables
+Provider precedence: **Gemini → Anthropic → rule-based**. Set one AI key.
+
 | Var | Purpose | Default |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Enables the live LLM agent | _(unset → rule-based)_ |
-| `LLM_MODEL` | Reasoning model | `claude-haiku-4-5-20251001` |
+| `GEMINI_API_KEY` | Gemini (preferred, free tier) — enables OCR + LLM agent | _(unset → rule-based)_ |
+| `GEMINI_MODEL` | Gemini model | `gemini-flash-latest` |
+| `ANTHROPIC_API_KEY` | Claude (paid alternative) | _(unset)_ |
+| `LLM_MODEL` | Claude model | `claude-haiku-4-5-20251001` |
 | `OFFICIAL_KEY` | Government Portal access code | `samadhan-admin` |
 | `DATABASE_URL` | Persistent Postgres URL | _(unset → SQLite)_ |
+
+> **Model note:** use the `gemini-flash-latest` alias — some accounts have zero free-tier
+> quota for pinned models like `gemini-2.0-flash`; the alias resolves to a currently
+> available model with quota.
 
 ---
 

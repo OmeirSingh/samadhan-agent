@@ -144,7 +144,7 @@ Access code defaults to `samadhan-admin` (override with `OFFICIAL_KEY`).
 | Var | Purpose | Default |
 |---|---|---|
 | `GEMINI_API_KEY` | Gemini (preferred, free) — enables OCR + LLM | _(unset)_ |
-| `GEMINI_MODEL` | Gemini model | `gemini-2.0-flash` |
+| `GEMINI_MODEL` | Gemini model | `gemini-flash-latest` |
 | `ANTHROPIC_API_KEY` | Claude (paid alternative) | _(unset)_ |
 | `OFFICIAL_KEY` | Government Portal access code | `samadhan-admin` |
 | `DATABASE_URL` | Persistent Postgres URL | _(unset → SQLite)_ |

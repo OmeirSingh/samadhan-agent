@@ -16,7 +16,9 @@ def active_provider() -> str:
 
 
 def gemini_model() -> str:
-    return os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    # Alias that resolves to a current model with quota; safer than a pinned id,
+    # since some accounts have zero free-tier quota for e.g. gemini-2.0-flash.
+    return os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 
 
 def anthropic_model() -> str:
